@@ -1,0 +1,1519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Bulk Traffic Review — Day Type Analysis</title>
+  <!-- © 2026 Eve Zhang · ezhang@iteris.com -->
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+  <style>
+    :root {
+      --sw: 292px;
+      --bg: #f0f2f6;
+      --surface: #fff;
+      --side: #0d1526;
+      --side-hover: #162038;
+      --side-active: #1b3260;
+      --text: #1e293b;
+      --muted: #64748b;
+      --light: #94a3b8;
+      --border: #e2e8f0;
+      --accent: #f59e0b;
+      --mono: 'JetBrains Mono', monospace;
+      --sans: 'DM Sans', sans-serif;
+      --r: 10px;
+      --sh: 0 1px 4px rgba(0,0,0,.08), 0 4px 16px rgba(0,0,0,.05);
+      --wday:#2563eb; --wday-bg:#dbeafe;
+      --sat:#7c3aed;  --sat-bg:#ede9fe;
+      --sun:#db2777;  --sun-bg:#fce7f3;
+      --ok:#16a34a;   --ok-bg:#dcfce7;
+      --warn:#d97706; --warn-bg:#fef3c7;
+      --issue:#dc2626;--issue-bg:#fee2e2;
+    }
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:var(--sans);background:var(--bg);color:var(--text);height:100vh;overflow:hidden;}
+
+    /* ── UPLOAD SCREEN ── */
+    #uploadScreen{
+      position:fixed;inset:0;background:var(--side);
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      z-index:100;padding:28px 20px;overflow-y:auto;
+    }
+    .up-eyebrow{font-family:var(--mono);color:var(--accent);font-size:11px;letter-spacing:3px;margin-bottom:8px;}
+    .up-title{color:#f1f5f9;font-size:24px;font-weight:700;margin-bottom:4px;}
+    .up-sub{color:#475569;font-size:13px;margin-bottom:24px;}
+
+    /* Folder structure diagram */
+    .folder-diagram{
+      background:#080f1e;border:1px solid #1e3050;border-radius:10px;
+      padding:16px 20px;max-width:780px;width:100%;margin-bottom:22px;
+      display:grid;grid-template-columns:1fr 1fr;gap:16px;
+    }
+    .fd-col-title{font-family:var(--mono);font-size:10px;color:var(--accent);letter-spacing:2px;margin-bottom:10px;text-transform:uppercase;}
+    .fd-tree{font-family:var(--mono);font-size:12px;color:#475569;line-height:1.8;}
+    .fd-tree .root{color:#93c5fd;font-weight:700;}
+    .fd-tree .folder{color:#fbbf24;}
+    .fd-tree .file{color:#6ee7b7;}
+    .fd-tree .dim{color:#2d4270;}
+    .fd-note{font-size:11px;color:#475569;margin-top:8px;line-height:1.5;}
+    .fd-note strong{color:#93c5fd;font-family:var(--mono);}
+
+    /* Upload cards */
+    .up-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;width:100%;max-width:780px;margin-bottom:18px;}
+    .up-card{
+      border:2px dashed #243350;border-radius:var(--r);padding:22px 16px;
+      text-align:center;transition:all .2s;
+    }
+    .up-card.clickable{cursor:pointer;}
+    .up-card.clickable:hover,.up-card.drag{border-color:var(--accent);background:rgba(245,158,11,.05);}
+    .up-card.done{border-color:#16a34a;border-style:solid;background:rgba(22,163,74,.05);}
+    .up-card input[type=file]{display:none;}
+    .up-icon{font-size:26px;margin-bottom:8px;}
+    .up-label{color:#e2e8f0;font-size:13px;font-weight:600;margin-bottom:4px;}
+    .up-hint{color:#475569;font-size:11px;line-height:1.5;margin-bottom:12px;}
+    .up-btn{
+      background:#1a2d4d;color:#93c5fd;border:1px solid #2d4270;
+      padding:7px 14px;border-radius:5px;font-size:12px;cursor:pointer;
+      font-family:var(--sans);transition:all .15s;
+    }
+    .up-btn:hover{background:#223660;}
+    .up-status{font-size:11px;margin-top:8px;min-height:16px;font-family:var(--mono);}
+    .up-status.ok{color:#4ade80;} .up-status.err{color:#f87171;}
+
+    .match-row{display:flex;align-items:center;gap:16px;margin-bottom:14px;}
+    .year-wrap{display:flex;align-items:center;gap:8px;}
+    .year-wrap label{color:#94a3b8;font-size:12px;}
+    .year-input{
+      background:#1a2d4d;border:1.5px solid #2d4270;color:#e2e8f0;
+      padding:7px 10px;border-radius:6px;font-size:13px;font-family:var(--mono);
+      width:80px;outline:none;text-align:center;
+    }
+    .year-input:focus{border-color:var(--accent);}
+    .match-btn{
+      background:var(--accent);color:#000;border:none;padding:12px 30px;
+      border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;
+      font-family:var(--sans);transition:all .2s;
+    }
+    .match-btn:disabled{opacity:.35;cursor:default;}
+    .match-btn:not(:disabled):hover{background:#fbbf24;transform:translateY(-1px);}
+    .match-info{color:#475569;font-size:12px;font-family:var(--mono);}
+    .match-info .hi{color:#fbbf24;} .match-info .lo{color:#f87171;}
+
+    /* ── APP LAYOUT ── */
+    #appLayout{display:flex;height:100vh;}
+
+    /* SIDEBAR */
+    .sidebar{width:var(--sw);background:var(--side);flex-shrink:0;display:flex;flex-direction:column;overflow:hidden;}
+    .sb-head{padding:13px 13px 9px;border-bottom:1px solid #182440;flex-shrink:0;}
+    .sb-eyebrow{font-family:var(--mono);color:var(--accent);font-size:9px;letter-spacing:2.5px;margin-bottom:4px;}
+    .sb-title{color:#e2e8f0;font-size:13px;font-weight:700;}
+    .sb-prog{margin-top:8px;}
+    .prog-bg{background:#182440;border-radius:3px;height:4px;overflow:hidden;}
+    .prog-fill{background:var(--accent);height:100%;border-radius:3px;transition:width .3s;}
+    .prog-txt{color:#3d5070;font-size:10px;font-family:var(--mono);margin-top:3px;}
+
+    .sb-legend{padding:6px 11px;border-bottom:1px solid #182440;display:flex;gap:6px;flex-wrap:wrap;}
+    .lp{font-size:10px;font-family:var(--mono);padding:2px 6px;border-radius:9px;font-weight:600;}
+    .lp.wday{background:var(--wday-bg);color:var(--wday);}
+    .lp.sat{background:var(--sat-bg);color:var(--sat);}
+    .lp.sun{background:var(--sun-bg);color:var(--sun);}
+
+    .sb-search{padding:7px 9px;border-bottom:1px solid #182440;flex-shrink:0;}
+    .sb-search input{width:100%;background:#182440;border:1px solid #243a60;border-radius:5px;color:#e2e8f0;padding:5px 8px;font-size:11px;font-family:var(--mono);outline:none;}
+    .sb-search input::placeholder{color:#3d5070;}
+    .sb-search input:focus{border-color:var(--accent);}
+
+    .sb-list{flex:1;overflow-y:auto;padding:3px 0;}
+    .sb-list::-webkit-scrollbar{width:3px;}
+    .sb-list::-webkit-scrollbar-thumb{background:#243a60;border-radius:2px;}
+
+    .int-item{padding:8px 11px;cursor:pointer;transition:background .1s;border-left:3px solid transparent;margin:1px 4px;border-radius:5px;}
+    .int-item:hover{background:var(--side-hover);}
+    .int-item.active{background:var(--side-active);border-left-color:var(--accent);}
+    .int-row{display:flex;align-items:center;gap:5px;margin-bottom:1px;}
+    .int-seq{font-family:var(--mono);font-size:10px;color:#3d5070;flex-shrink:0;}
+    .int-id{font-family:var(--mono);font-size:11px;font-weight:700;color:#e2e8f0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .sdot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+    .sdot.ok{background:var(--ok);} .sdot.warning{background:var(--warn);} .sdot.issue{background:var(--issue);} .sdot.unreviewed{background:#243a60;}
+    .int-dc{display:flex;gap:3px;margin-bottom:1px;}
+    .dc{font-size:10px;font-family:var(--mono);padding:1px 5px;border-radius:8px;}
+    .dc.wday{background:rgba(37,99,235,.2);color:#93bbff;}
+    .dc.sat{background:rgba(124,58,237,.2);color:#c4b5fd;}
+    .dc.sun{background:rgba(219,39,119,.2);color:#f9a8d4;}
+    .int-note{font-size:10px;color:#3d5070;font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+    .sb-foot{padding:9px;border-top:1px solid #182440;flex-shrink:0;display:flex;flex-direction:column;gap:5px;}
+    .sb-btn{width:100%;padding:7px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;font-family:var(--sans);transition:all .15s;border:none;}
+    .sb-btn.exp{background:#1a2d4d;color:#93c5fd;}
+    .sb-btn.exp:hover{background:#223660;}
+    .sb-btn.exp2{background:#0f2942;color:#7dd3fc;}
+    .sb-btn.exp2:hover{background:#14375a;}
+    .sb-btn.rst{background:transparent;color:#3d5070;border:1px solid #1a2d4d;font-size:10px;}
+    .sb-btn.rst:hover{color:#f87171;border-color:#f87171;}
+
+    /* MAIN */
+    .main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;}
+    .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;gap:10px;flex-shrink:0;}
+    .tb-seq{font-family:var(--mono);font-size:12px;color:var(--muted);background:var(--bg);padding:3px 8px;border-radius:4px;}
+    .tb-id{font-family:var(--mono);font-size:16px;font-weight:700;}
+    .tb-badge{font-size:10px;font-family:var(--mono);padding:3px 7px;border-radius:4px;font-weight:600;}
+    .tb-badge.ok{background:var(--ok-bg);color:var(--ok);}
+    .tb-badge.warning{background:var(--warn-bg);color:var(--warn);}
+    .tb-badge.issue{background:var(--issue-bg);color:var(--issue);}
+    .tb-badge.unreviewed{background:#f1f5f9;color:#64748b;}
+    .tb-days{display:flex;gap:4px;}
+    .tb-day{font-size:10px;font-family:var(--mono);padding:2px 6px;border-radius:9px;font-weight:700;}
+    .tb-day.wday{background:var(--wday-bg);color:var(--wday);}
+    .tb-day.sat{background:var(--sat-bg);color:var(--sat);}
+    .tb-day.sun{background:var(--sun-bg);color:var(--sun);}
+    .tb-sp{flex:1;}
+    .nb{background:var(--bg);border:1px solid var(--border);padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--sans);transition:all .15s;color:var(--text);}
+    .nb:hover:not(:disabled){background:var(--border);}
+    .nb:disabled{opacity:.35;cursor:default;}
+    .nc{font-family:var(--mono);font-size:11px;color:var(--muted);padding:0 3px;}
+
+    .content{flex:1;display:flex;overflow:hidden;}
+
+    /* CHART PANEL */
+    .cpanel{flex:1;overflow-y:auto;padding:16px 16px 16px 20px;min-width:0;}
+    .cpanel::-webkit-scrollbar{width:4px;}
+    .cpanel::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+
+    /* Day tabs */
+    .day-tabs{display:flex;gap:0;margin-bottom:12px;background:var(--surface);border-radius:8px;padding:3px;box-shadow:var(--sh);border:1px solid var(--border);}
+    .day-tab{flex:1;padding:7px 4px;text-align:center;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;font-family:var(--mono);transition:all .15s;color:var(--muted);}
+    .day-tab:hover{background:var(--bg);}
+    .day-tab.active.all{background:#1e293b;color:#fff;}
+    .day-tab.active.weekday{background:var(--wday);color:#fff;}
+    .day-tab.active.saturday{background:var(--sat);color:#fff;}
+    .day-tab.active.sunday{background:var(--sun);color:#fff;}
+    .day-tab.disabled{opacity:.3;cursor:default;pointer-events:none;}
+
+    /* Controls */
+    .ctrl-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;}
+    .cg{display:flex;flex-direction:column;gap:3px;}
+    .cg label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;}
+    .cg select{padding:6px 9px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--sans);background:var(--surface);color:var(--text);outline:none;}
+    .cg select:focus{border-color:var(--accent);}
+
+    .approach-chips{display:flex;flex-wrap:wrap;gap:4px;max-width:480px;}
+    .ach{padding:4px 8px;border-radius:14px;font-size:11px;font-weight:500;cursor:pointer;border:1.5px solid var(--border);background:var(--bg);color:var(--muted);transition:all .12s;font-family:var(--mono);}
+    .ach.on{background:#dbeafe;border-color:#93c5fd;color:#1e40af;}
+
+    /* Chart card */
+    .chart-card{background:var(--surface);border-radius:var(--r);padding:16px 18px;box-shadow:var(--sh);margin-bottom:10px;}
+    .chart-title{font-size:11px;font-weight:700;color:var(--muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:.07em;}
+    .chart-sub{font-size:10px;color:var(--light);font-family:var(--mono);margin-bottom:12px;}
+    #chartCanvas{max-height:310px;}
+
+    /* Info strip */
+    .info-strip{background:var(--surface);border-radius:8px;padding:8px 12px;margin-bottom:10px;display:flex;gap:16px;flex-wrap:wrap;box-shadow:var(--sh);}
+    .isp{display:flex;flex-direction:column;gap:0px;}
+    .isp-l{font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;}
+    .isp-v{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text);}
+
+    .adj-warn{background:var(--warn-bg);border-left:3px solid var(--warn);padding:7px 10px;border-radius:6px;font-size:11px;color:#78350f;margin-bottom:8px;}
+    .no-data{text-align:center;padding:60px 20px;color:var(--muted);}
+    .no-data-icon{font-size:36px;margin-bottom:10px;}
+    .loading{text-align:center;padding:60px 20px;}
+    .spin{font-size:26px;animation:spin 1s linear infinite;display:inline-block;}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .load-txt{color:var(--muted);font-size:13px;margin-top:10px;}
+
+    /* NOTES PANEL */
+    .npanel{width:280px;flex-shrink:0;border-left:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;overflow:hidden;}
+    .np-scroll{flex:1;overflow-y:auto;padding:12px;}
+    .np-scroll::-webkit-scrollbar{width:3px;}
+    .np-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+    .np-sec{margin-bottom:12px;}
+    .np-lbl{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px;}
+
+    .det-chips{display:flex;flex-wrap:wrap;gap:3px;}
+    .dch{padding:3px 7px;border-radius:11px;font-size:10px;font-family:var(--mono);border:1.5px solid;cursor:pointer;display:flex;align-items:center;gap:3px;transition:all .12s;}
+    .dch.normal{background:#f8fafc;border-color:var(--border);color:#475569;}
+    .dch.warn{background:#fef3c7;border-color:#fde68a;color:#78350f;}
+    .dch.critical{background:#fee2e2;border-color:#fca5a5;color:#991b1b;}
+    .dch.excl{opacity:.5;text-decoration:line-through;}
+    .dch-x{font-size:11px;opacity:.55;}
+    .chip-tag{font-size:9px;font-weight:700;padding:1px 4px;border-radius:3px;background:#ffedd5;color:#9a3412;}
+
+    .date-chips{display:flex;flex-wrap:wrap;gap:3px;}
+    .datch{padding:3px 7px;border-radius:9px;font-size:10px;font-family:var(--mono);cursor:pointer;display:flex;align-items:center;gap:4px;border:1.5px solid;transition:all .12s;}
+    .datch.weekday{background:rgba(37,99,235,.08);border-color:rgba(37,99,235,.25);color:var(--wday);}
+    .datch.saturday{background:rgba(124,58,237,.08);border-color:rgba(124,58,237,.25);color:var(--sat);}
+    .datch.sunday{background:rgba(219,39,119,.08);border-color:rgba(219,39,119,.25);color:var(--sun);}
+    .datch.excl{opacity:.4;text-decoration:line-through;}
+    .datch-x{font-size:10px;opacity:.55;}
+
+    .exp-row{padding:7px 10px;border-top:1px solid var(--border);display:flex;gap:5px;background:#fafbfc;}
+    .ebtn{flex:1;padding:6px 4px;border-radius:5px;font-size:10px;font-weight:600;cursor:pointer;border:none;font-family:var(--sans);transition:all .15s;text-align:center;}
+    .ebtn.pri{background:#1e40af;color:#fff;}
+    .ebtn.pri:hover{background:#1d4ed8;}
+    .ebtn.sec{background:#f1f5f9;color:#475569;border:1px solid var(--border);}
+    .ebtn.sec:hover{background:var(--border);}
+
+    .np-foot{padding:10px;border-top:1px solid var(--border);flex-shrink:0;}
+    .status-btns{display:flex;gap:5px;margin-bottom:10px;}
+    .sbtn{flex:1;padding:7px 2px;border-radius:6px;font-size:11px;font-weight:600;border:2px solid transparent;cursor:pointer;font-family:var(--sans);transition:all .15s;}
+    .sbtn.ok{background:var(--ok-bg);color:var(--ok);}
+    .sbtn.ok.on{border-color:var(--ok);}
+    .sbtn.warning{background:var(--warn-bg);color:var(--warn);}
+    .sbtn.warning.on{border-color:var(--warn);}
+    .sbtn.issue{background:var(--issue-bg);color:var(--issue);}
+    .sbtn.issue.on{border-color:var(--issue);}
+    .ntxt{width:100%;height:95px;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;font-family:var(--sans);resize:vertical;outline:none;color:var(--text);line-height:1.5;background:var(--bg);transition:border-color .15s;}
+    .ntxt:focus{border-color:var(--accent);background:#fff;}
+    .ntxt::placeholder{color:var(--light);}
+    .kbd{background:#1a2d4d;color:#93c5fd;padding:1px 5px;border-radius:3px;font-family:var(--mono);font-size:10px;}
+
+    .hidden{display:none!important;}
+
+    /* ── SYNCHRO COMPARISON TABLE ── */
+    .syn-section{margin-bottom:12px;border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+    .syn-header{background:#f8fafc;padding:7px 10px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;}
+    .syn-header-title{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;}
+    .syn-header-arrow{font-size:11px;color:var(--light);transition:transform .2s;}
+    .syn-header-arrow.open{transform:rotate(180deg);}
+    .syn-body{overflow:hidden;transition:max-height .2s;}
+    .syn-table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:10px;}
+    .syn-table th{background:#f1f5f9;padding:4px 5px;text-align:right;color:var(--muted);font-weight:700;font-size:9px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);position:sticky;top:0;}
+    .syn-table th:first-child{text-align:left;}
+    .syn-table td{padding:3px 5px;text-align:right;border-bottom:1px solid #f1f5f9;color:var(--text);}
+    .syn-table td:first-child{text-align:left;font-weight:700;color:#334155;}
+    .syn-table tr:last-child td{border-bottom:none;}
+    .syn-table tr:hover td{background:#f8fafc;}
+    .diff-ok{color:#16a34a;background:#dcfce7;border-radius:3px;padding:1px 4px;}
+    .diff-warn{color:#d97706;background:#fef3c7;border-radius:3px;padding:1px 4px;}
+    .diff-bad{color:#dc2626;background:#fee2e2;border-radius:3px;padding:1px 4px;}
+    .diff-na{color:#94a3b8;}
+    .syn-plan-note{font-size:10px;color:var(--light);font-family:var(--mono);padding:5px 10px;background:#f8fafc;border-top:1px solid var(--border);}
+    .syn-no-match{font-size:11px;color:var(--light);font-style:italic;padding:10px;}
+
+    /* sidebar diff badges */
+    .diff-badge{font-size:9px;font-family:var(--mono);padding:1px 5px;border-radius:8px;font-weight:700;}
+    .diff-badge.ok{background:rgba(22,163,74,.2);color:#4ade80;}
+    .diff-badge.warn{background:rgba(217,119,6,.2);color:#fbbf24;}
+    .diff-badge.bad{background:rgba(220,38,38,.2);color:#f87171;}
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════ UPLOAD ══════════════════════════════ -->
+<div id="uploadScreen">
+  <div class="up-eyebrow">TRAFFIC VOLUME REVIEW</div>
+  <div class="up-title">Bulk Multi-Intersection · Weekday / Saturday / Sunday</div>
+  <div class="up-sub">Select the top-level project folder — subfolders are each one intersection</div>
+
+  <!-- Folder structure diagram -->
+  <div class="folder-diagram">
+    <div>
+      <div class="fd-col-title">📂 Volume folder structure</div>
+      <div class="fd-tree">
+        <div class="root">📁 Rt.50W/  ← select this folder</div>
+        <div style="margin-left:16px;">
+          <div><span class="dim">├─</span> <span class="folder">📁 74_929608025/</span></div>
+          <div style="margin-left:24px;"><span class="dim">├─</span> <span class="file">929608025_0422.xlsx</span></div>
+          <div style="margin-left:24px;"><span class="dim">└─</span> <span class="file">929608025_0424.xlsx</span></div>
+          <div><span class="dim">└─</span> <span class="folder">📁 75_929608030/</span></div>
+          <div style="margin-left:24px;"><span class="dim">└─</span> <span class="file">…</span></div>
+        </div>
+      </div>
+      <div class="fd-note">Folder name: <strong>{seq}_{KITS_ID}</strong> · Date from filename: <strong>_MMDD</strong></div>
+    </div>
+    <div>
+      <div class="fd-col-title">📊 Synchro baseline folder (optional)</div>
+      <div class="fd-tree">
+        <div class="root">📁 Synchro Volume by Plan/  ← select this</div>
+        <div style="margin-left:16px;">
+          <div><span class="dim">├─</span> <span class="file">VOLUME_AM.csv</span></div>
+          <div><span class="dim">├─</span> <span class="file">VOLUME_MD.csv</span></div>
+          <div><span class="dim">├─</span> <span class="file">VOLUME_PM.csv</span></div>
+          <div><span class="dim">├─</span> <span class="file">VOLUME_WE_AM.csv</span></div>
+          <div><span class="dim">├─</span> <span class="file">VOLUME_SAT_PK.csv</span></div>
+          <div><span class="dim">├─</span> <span class="file">VOLUME_SUN_PK.csv</span></div>
+          <div><span class="dim">└─</span> <span class="file">VOLUME_WE_PM.csv · VOLUME_OP.csv</span></div>
+        </div>
+      </div>
+      <div class="fd-note">INTID in CSV = seq number (74, 75…) · Peak hour auto-extracted per plan</div>
+    </div>
+  </div>
+
+  <div class="up-grid" style="grid-template-columns:1fr 1fr;max-width:660px;">
+    <!-- Volume folder -->
+    <div class="up-card clickable" id="volCard">
+      <div class="up-icon">📁</div>
+      <div class="up-label">Volume Folder</div>
+      <div class="up-hint">Top-level folder (e.g. <em>Rt.50W</em>)<br>Subfolders = one intersection each</div>
+      <input type="file" id="volInput" webkitdirectory multiple/>
+      <button class="up-btn" onclick="document.getElementById('volInput').click()">Select Folder</button>
+      <div class="up-status" id="volStatus"></div>
+    </div>
+
+    <!-- Synchro baseline folder -->
+    <div class="up-card clickable" id="synchroCard">
+      <div class="up-icon">📊</div>
+      <div class="up-label">Synchro Baseline <span style="font-weight:400;color:#475569">(opt.)</span></div>
+      <div class="up-hint">Folder of VOLUME_*.csv files<br>All intersections in each file<br>INTID = seq number (74, 75…)</div>
+      <input type="file" id="synchroInput" webkitdirectory multiple accept=".csv"/>
+      <button class="up-btn" onclick="document.getElementById('synchroInput').click()">Select Synchro Folder</button>
+      <div class="up-status" id="synchroStatus"></div>
+    </div>
+
+    <!-- Dictionary folder -->
+    <div class="up-card clickable" id="dictCard">
+      <div class="up-icon">📋</div>
+      <div class="up-label">Dictionary Folder <span style="font-weight:400;color:#475569">(opt.)</span></div>
+      <div class="up-hint">One dict file per intersection<br>Matched by KITS_ID · .xlsx/.csv<br>Columns: detector, movement, phase</div>
+      <input type="file" id="dictInput" webkitdirectory multiple/>
+      <button class="up-btn" onclick="document.getElementById('dictInput').click()">Select Folder</button>
+      <div class="up-status" id="dictStatus"></div>
+    </div>
+
+    <!-- Options -->
+    <div class="up-card" style="cursor:default;">
+      <div class="up-icon">⚙️</div>
+      <div class="up-label">Options</div>
+      <div class="up-hint" style="margin-bottom:8px;">Year for day-of-week calculation</div>
+      <div style="display:flex;align-items:center;gap:8px;justify-content:center;margin-bottom:10px;">
+        <label style="color:#94a3b8;font-size:12px;">Year:</label>
+        <input type="number" class="year-input" id="yearInput" value="2026" min="2000" max="2099"/>
+      </div>
+      <div class="up-hint" style="margin-bottom:0;font-size:10px;">AM peak: <strong style="color:#93c5fd;">7–10 AM</strong> · PM peak: <strong style="color:#93c5fd;">3–7 PM</strong><br>Synchro plans: AM↔WE_AM for peak AM<br>PM↔WE_PM for peak PM</div>
+    </div>
+  </div>
+
+  <div class="match-row">
+    <button class="match-btn" id="matchBtn" disabled onclick="matchAndStart()">🔍 Match &amp; Start Review</button>
+    <div class="year-wrap">
+      <div class="match-info" id="matchInfo"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════ APP ══════════════════════════════ -->
+<div id="appLayout" class="hidden">
+  <aside class="sidebar">
+    <div class="sb-head">
+      <div class="sb-eyebrow">BULK REVIEW</div>
+      <div class="sb-title">Intersections</div>
+      <div class="sb-prog">
+        <div class="prog-bg"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
+        <div class="prog-txt" id="progTxt">0 of 0 reviewed</div>
+      </div>
+    </div>
+    <div class="sb-legend">
+      <span class="lp wday">● Weekday</span>
+      <span class="lp sat">● Saturday</span>
+      <span class="lp sun">● Sunday</span>
+    </div>
+    <div class="sb-search"><input type="text" id="sbSearch" placeholder="Search ID or seq…" oninput="renderSidebar()"/></div>
+    <div class="sb-list" id="sbList"></div>
+    <div class="sb-foot">
+      <button class="sb-btn exp" onclick="exportAllNotes()">📥 Export All Notes</button>
+      <button class="sb-btn exp2" onclick="exportAllPeaks()">📊 Export All Peak Volumes</button>
+      <button class="sb-btn rst" onclick="resetAll()">↩ Upload New Files</button>
+      <div style="margin-top:8px;font-size:9px;color:#2d4270;font-family:var(--mono);text-align:center;line-height:1.6;">
+        © 2026 Eve Zhang · ezhang@iteris.com
+      </div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="tb-seq" id="tbSeq">#—</div>
+      <div class="tb-id" id="tbId">—</div>
+      <span class="tb-badge unreviewed" id="tbBadge">Unreviewed</span>
+      <div class="tb-days" id="tbDays"></div>
+      <div class="tb-sp"></div>
+      <button class="nb" id="prevBtn" onclick="navigate(-1)" disabled>← Prev</button>
+      <span class="nc" id="navCtr">1 / 1</span>
+      <button class="nb" id="nextBtn" onclick="navigate(1)" disabled>Next →</button>
+    </div>
+
+    <div class="content">
+      <!-- Chart panel -->
+      <div class="cpanel">
+        <div class="no-data" id="emptyMsg"><div class="no-data-icon">👈</div><div>Select an intersection from the sidebar</div></div>
+        <div class="loading hidden" id="loadMsg"><div class="spin">⚙️</div><div class="load-txt">Processing files…</div></div>
+
+        <div id="mainContent" class="hidden">
+          <div class="info-strip" id="infoStrip"></div>
+
+          <div class="day-tabs" id="dayTabs">
+            <div class="day-tab active all"      data-dt="all"      onclick="setDayTab('all')">All Dates</div>
+            <div class="day-tab weekday"          data-dt="weekday"  onclick="setDayTab('weekday')">📅 Weekday</div>
+            <div class="day-tab saturday"         data-dt="saturday" onclick="setDayTab('saturday')">🟣 Saturday</div>
+            <div class="day-tab sunday"           data-dt="sunday"   onclick="setDayTab('sunday')">🩷 Sunday</div>
+          </div>
+
+          <div class="ctrl-row">
+            <div class="cg">
+              <label>View</label>
+              <select id="viewMode" onchange="updateChart()">
+                <option value="approach">By Approach</option>
+                <option value="detector">By Detector</option>
+              </select>
+            </div>
+            <div class="cg">
+              <label>Display</label>
+              <select id="displayMode" onchange="onDisplayModeChange()">
+                <option value="average">Averaged Profile</option>
+                <option value="individual">Individual Date</option>
+                <option value="synchro" id="synchroOption" style="display:none">vs Synchro Baseline</option>
+              </select>
+            </div>
+            <div class="cg hidden" id="dateCtrl">
+              <label>Date</label>
+              <select id="dateSelect" onchange="updateChart()"></select>
+            </div>
+            <div class="cg">
+              <label>Aggregation</label>
+              <select id="aggMode" onchange="updateChart()">
+                <option value="15min">15-Minute</option>
+                <option value="hourly">Hourly</option>
+              </select>
+            </div>
+            <div class="cg">
+              <label id="itemLbl">Approaches</label>
+              <div class="approach-chips" id="achips"></div>
+            </div>
+          </div>
+
+          <div class="adj-warn hidden" id="adjWarn"></div>
+
+          <div class="chart-card">
+            <div class="chart-title" id="chartTitle">Volume Chart</div>
+            <div class="chart-sub" id="chartSub"></div>
+            <canvas id="chartCanvas"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Notes panel -->
+      <div class="npanel">
+        <div class="np-scroll" id="npScroll">
+          <p style="color:var(--light);font-size:12px;padding:14px 0;">Select an intersection.</p>
+        </div>
+        <div class="exp-row">
+          <button class="ebtn pri" onclick="exportCurrentPeaks()">📊 Export Peaks</button>
+          <button class="ebtn sec" onclick="exportCurrentAvg()">📋 Export Avg</button>
+        </div>
+        <div class="np-foot">
+          <div class="np-lbl">Status</div>
+          <div class="status-btns">
+            <button class="sbtn ok"      id="btnOk"    onclick="setStatus('ok')">✅ OK</button>
+            <button class="sbtn warning" id="btnWarn"  onclick="setStatus('warning')">⚠️ Warn</button>
+            <button class="sbtn issue"   id="btnIssue" onclick="setStatus('issue')">🚨 Issue</button>
+          </div>
+          <div class="np-lbl">Notes</div>
+          <textarea class="ntxt" id="notesArea" placeholder="Notes about this intersection… (auto-saved)" oninput="saveNotes()"></textarea>
+          <div style="margin-top:5px;color:var(--light);font-size:10px;line-height:1.6;">
+            <span class="kbd">←→</span> navigate · <span class="kbd">1</span><span class="kbd">2</span><span class="kbd">3</span> status<br>
+            <span class="kbd">W</span> weekday · <span class="kbd">S</span> saturday · <span class="kbd">U</span> sunday
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════
+const ST = {
+  intersections: {},  // keyed by folderName (e.g. "74_929608025")
+  order: [],          // sorted by seq number
+  currentId: null,
+  chart: null,
+  selectedItems: new Set(),
+  activeDayTab: 'all',
+  dataYear: 2026,
+  synchroByIntid: {}, // { intid: { AM:{movs}, PM:{movs}, WE_AM:{movs}, ... } }
+  synchroLoaded: false,
+};
+
+// ══════════════════════════════════════════════════════
+// UTILS
+// ══════════════════════════════════════════════════════
+const esc = v => String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uniq = a => [...new Set(a)];
+function median(arr){ const a=arr.filter(Number.isFinite).sort((x,y)=>x-y); if(!a.length)return null; const m=Math.floor(a.length/2); return a.length%2?a[m]:(a[m-1]+a[m])/2; }
+function excelToMin(v){ return Math.round((v - Math.floor(v)) * 1440); }
+function minToHH(m){ return `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`; }
+
+function getDayType(dateKey, year){
+  const [mm,dd] = dateKey.split('/').map(Number);
+  const dow = new Date(year, mm-1, dd).getDay();
+  if(dow===0) return 'sunday';
+  if(dow===6) return 'saturday';
+  return 'weekday';
+}
+const DAY_LABEL = { weekday:'Weekday', saturday:'Saturday', sunday:'Sunday', all:'All' };
+const COLORS = ['#2563eb','#dc2626','#16a34a','#ca8a04','#9333ea','#0891b2','#db2777','#65a30d','#f97316','#06b6d4','#8b5cf6','#ec4899'];
+
+// Extract the sequence number from folder name "74_929608025" → "74"
+function extractSeq(folderName){ const m=folderName.match(/^(\d+)_/); return m?m[1]:''; }
+// Extract KITS ID from folder name "74_929608025" → "929608025"
+function extractKitsId(folderName){ const m=folderName.match(/_(\d+)$/); return m?m[1]:folderName; }
+// Extract date from filename via _MMDD pattern
+function extractDate(fname){ const m=fname.match(/_(\d{2})(\d{2})/); return m?`${m[1]}/${m[2]}`:null; }
+
+function detectGran(data){
+  const sample=data.filter(r=>r&&Number.isFinite(r.dateTime)&&r.detector).slice(0,6000);
+  if(sample.length<50) return {isAlready15:false,aligned15:0,res:null};
+  const byD={};
+  for(const r of sample){const m=excelToMin(r.dateTime);(byD[r.detector]||=[]).push(m);}
+  const dels=[];
+  for(const d in byD){const t=[...byD[d]].sort((a,b)=>a-b).slice(0,400);for(let i=1;i<t.length;i++){const x=t[i]-t[i-1];if(x>0&&x<=1000)dels.push(x);}}
+  const res=median(dels);
+  let al=0,tot=0;
+  for(const r of sample){const m=excelToMin(r.dateTime);if(!Number.isFinite(m))continue;tot++;if(m%15===0)al++;}
+  const aligned15=tot?al/tot:0;
+  const isAlready15=(res!==null&&res>=13&&res<=17)||aligned15>=0.85;
+  return {isAlready15,aligned15,res};
+}
+
+// ══════════════════════════════════════════════════════
+// FILE UPLOAD
+// ══════════════════════════════════════════════════════
+let pVolFiles = [], pDictFiles = [], pSynchroFiles = [];
+
+document.getElementById('volInput').addEventListener('change', e=>{
+  pVolFiles = Array.from(e.target.files);
+  const subfolders = new Set();
+  pVolFiles.forEach(f=>{
+    const parts = f.webkitRelativePath.split('/');
+    if(parts.length>=3) subfolders.add(parts[1]);
+    else if(parts.length===2) subfolders.add('_ROOT_');
+  });
+  document.getElementById('volCard').classList.add('done');
+  document.getElementById('volStatus').className='up-status ok';
+  document.getElementById('volStatus').textContent=`✓ ${pVolFiles.length} file(s) in ${subfolders.size} intersection(s)`;
+  checkBtn();
+});
+
+document.getElementById('dictInput').addEventListener('change', e=>{
+  pDictFiles = Array.from(e.target.files);
+  document.getElementById('dictCard').classList.add('done');
+  document.getElementById('dictStatus').className='up-status ok';
+  document.getElementById('dictStatus').textContent=`✓ ${pDictFiles.length} dictionary file(s)`;
+  checkBtn();
+});
+
+document.getElementById('synchroInput').addEventListener('change', async e=>{
+  pSynchroFiles = Array.from(e.target.files).filter(f=>f.name.toLowerCase().startsWith('volume_')&&f.name.toLowerCase().endsWith('.csv'));
+  if(!pSynchroFiles.length){ document.getElementById('synchroStatus').className='up-status err'; document.getElementById('synchroStatus').textContent='No VOLUME_*.csv files found'; return; }
+  document.getElementById('synchroCard').classList.add('done');
+  document.getElementById('synchroStatus').className='up-status ok';
+  const planNames = pSynchroFiles.map(f=>f.name.replace(/^VOLUME_/i,'').replace(/\.csv$/i,'')).join(' ');
+  document.getElementById('synchroStatus').textContent=`✓ ${pSynchroFiles.length} plan files (${planNames})`;
+  // If review already started, parse and attach immediately
+  if(ST.order.length){
+    ST.synchroByIntid = await parseSynchroFiles(pSynchroFiles);
+    ST.synchroLoaded = true;
+    attachSynchroToIntersections();
+    if(ST.currentId) rerenderCurrentSynchro();
+  }
+});
+
+function checkBtn(){
+  const btn = document.getElementById('matchBtn');
+  btn.disabled = pVolFiles.length === 0;
+  // Build match preview
+  const subfolders = new Set();
+  pVolFiles.forEach(f=>{
+    const parts = f.webkitRelativePath.split('/');
+    if(parts.length>=3) subfolders.add(parts[1]);
+  });
+  const kitsIds = [...subfolders].map(extractKitsId);
+  const dictKitsIds = new Set(pDictFiles.map(f=>{
+    const name = f.name.replace(/\.(xlsx?|csv)$/i,'');
+    const m = name.match(/(\d{7,})/); return m?m[1]:name;
+  }));
+  const matched = kitsIds.filter(id=>dictKitsIds.has(id)).length;
+  document.getElementById('matchInfo').innerHTML =
+    `<span class="hi">${subfolders.size}</span> intersections · <span class="hi">${matched}</span> dict matched · <span class="lo">${subfolders.size-matched}</span> without dict`;
+}
+
+// ══════════════════════════════════════════════════════
+// MATCH & INIT
+// ══════════════════════════════════════════════════════
+function matchAndStart(){
+  ST.dataYear = parseInt(document.getElementById('yearInput').value)||2026;
+
+  // Group volume files by subfolder name
+  const volByFolder = {};
+  pVolFiles.forEach(f=>{
+    const parts = f.webkitRelativePath.split('/');
+    // parts: [rootFolder, subfolder, filename] OR [rootFolder, filename] if flat
+    const subfolder = parts.length>=3 ? parts[1] : parts[0];
+    if(!volByFolder[subfolder]) volByFolder[subfolder]=[];
+    volByFolder[subfolder].push(f);
+  });
+
+  // Build dict lookup by kitsId (numeric part)
+  const dictByKitsId = {};
+  const dictByFullName = {};
+  pDictFiles.forEach(f=>{
+    const base = f.name.replace(/\.(xlsx?|csv)$/i,'');
+    dictByFullName[base.toLowerCase()] = f;
+    // extract longest numeric sequence
+    const m = base.match(/(\d{6,})/); if(m) dictByKitsId[m[1]] = f;
+  });
+
+  ST.intersections = {}; ST.order = [];
+
+  Object.entries(volByFolder).forEach(([folder, files])=>{
+    const kitsId = extractKitsId(folder);
+    const seq = extractSeq(folder);
+    // Find matching dict
+    let dictFile = dictByKitsId[kitsId] ||
+                   dictByFullName[folder.toLowerCase()] ||
+                   dictByFullName[kitsId.toLowerCase()] || null;
+
+    ST.intersections[folder] = {
+      id: folder,
+      kitsId,
+      seq: seq ? parseInt(seq) : 9999,
+      seqLabel: seq || '—',
+      volumeFiles: files,
+      dictFile,
+      status:'unreviewed', notes:'',
+      processed:false,
+      processedData:{},
+      rawDataByDate:{},
+      dateTypes:{},
+      detectorDictionary:null,
+      phaseDictionary:null,
+      approachData:{},
+      excludedDates: new Set(),
+      excludedDetectors: new Set(),
+      synchroPlans: null,   // { AM, MD, PM, OP, WE_AM, SAT_PK, WE_PM, SUN_PK }
+    };
+    ST.order.push(folder);
+  });
+
+  // Sort by sequence number
+  ST.order.sort((a,b)=>{
+    const sa=ST.intersections[a].seq, sb=ST.intersections[b].seq;
+    return sa!==sb ? sa-sb : a.localeCompare(b, undefined, {numeric:true});
+  });
+
+  document.getElementById('uploadScreen').classList.add('hidden');
+  document.getElementById('appLayout').classList.remove('hidden');
+
+  // Parse Synchro if files were selected before clicking Match
+  if(pSynchroFiles.length){
+    parseSynchroFiles(pSynchroFiles).then(result=>{
+      ST.synchroByIntid = result;
+      ST.synchroLoaded = true;
+      attachSynchroToIntersections();
+      if(ST.currentId) rerenderCurrentSynchro();
+    });
+  }
+
+  renderSidebar();
+  if(ST.order.length) selectIntersection(ST.order[0]);
+}
+
+// ══════════════════════════════════════════════════════
+// SYNCHRO PARSING
+// ══════════════════════════════════════════════════════
+const CORE_MOVS = ['NBL','NBT','NBR','SBL','SBT','SBR','EBL','EBT','EBR','WBL','WBT','WBR'];
+// Aliases: normalize column headers to standard names
+const MOV_ALIASES = {
+  NL:'NBL',NT:'NBT',NTH:'NBT',NR:'NBR',
+  SL:'SBL',ST:'SBT',STH:'SBT',SR:'SBR',
+  EL:'EBL',ET:'EBT',ETH:'EBT',ER:'EBR',
+  WL:'WBL',WT:'WBT',WTH:'WBT',WR:'WBR',
+};
+// Plan → which day type AM/PM baseline
+// dayType → { am: planName, pm: planName }
+// Saturday/Sunday AM peak → WE_AM (8:30-10:00 / 9:30-10:30)
+// Saturday PM peak → SAT_PK (10:00-19:00) — the mid/afternoon plan, like MD for weekdays
+// Sunday PM peak  → SUN_PK (10:30-18:00) — same reasoning
+const PLAN_FOR_PEAK = {
+  weekday:  { am:'AM',    pm:'PM'    },
+  saturday: { am:'WE_AM', pm:'SAT_PK' },
+  sunday:   { am:'WE_AM', pm:'SUN_PK' },
+};
+
+async function parseSynchroFiles(files){
+  const byIntid = {};
+  for(const file of files){
+    if(!file.name.toLowerCase().startsWith('volume_')) continue;
+    const planRaw = file.name.replace(/^VOLUME_/i,'').replace(/\.csv$/i,'').toUpperCase();
+    try{
+      const text = await file.text();
+      const lines = text.split(/\r?\n/).filter(l=>l.trim());
+      // Skip rows until we find the header row that contains INTID
+      let headerIdx = -1;
+      for(let i=0;i<Math.min(5,lines.length);i++){
+        if(lines[i].toUpperCase().includes('INTID')){ headerIdx=i; break; }
+      }
+      if(headerIdx<0) continue;
+      const rawHeaders = lines[headerIdx].split(',').map(h=>h.trim().replace(/"/g,''));
+      // Normalize headers
+      const headers = rawHeaders.map(h=>{ const u=h.toUpperCase(); return MOV_ALIASES[u]||u; });
+      const intidIdx = headers.indexOf('INTID');
+      if(intidIdx<0) continue;
+      // Map core movement → column index
+      const movIdx = {};
+      CORE_MOVS.forEach(m=>{ const i=headers.indexOf(m); if(i>=0) movIdx[m]=i; });
+
+      // Collect rows per INTID
+      const rowsByIntid = {};
+      for(const line of lines.slice(headerIdx+1)){
+        const cells = line.split(',').map(c=>c.trim().replace(/"/g,''));
+        if(cells.length<=intidIdx) continue;
+        const intid = parseInt(cells[intidIdx]);
+        if(isNaN(intid)||intid<=0) continue;
+        const movs = {};
+        let total = 0;
+        CORE_MOVS.forEach(m=>{ if(movIdx[m]!==undefined){ const v=parseFloat(cells[movIdx[m]])||0; movs[m]=v; total+=v; } });
+        movs._total = total;
+        (rowsByIntid[intid]||=[]).push(movs);
+      }
+      // Pick peak hour row per INTID (highest total)
+      for(const [intid, rows] of Object.entries(rowsByIntid)){
+        const peak = rows.reduce((best,r)=>r._total>best._total?r:best, rows[0]);
+        const clean = {...peak}; delete clean._total;
+        (byIntid[intid]||={})[planRaw] = clean;
+      }
+    }catch(e){ console.warn('Synchro parse error',file.name,e); }
+  }
+  return byIntid;
+}
+
+function attachSynchroToIntersections(){
+  for(const id of ST.order){
+    const obj = ST.intersections[id];
+    const plans = ST.synchroByIntid[obj.seq];
+    obj.synchroPlans = plans||null;
+  }
+}
+
+function rerenderCurrentSynchro(){
+  const obj = ST.intersections[ST.currentId]; if(!obj||!obj.processed) return;
+  // Show synchro option in display dropdown
+  const opt = document.getElementById('synchroOption');
+  if(opt) opt.style.display = obj.synchroPlans ? '' : 'none';
+  renderInfoStrip(obj);
+  renderNpanel(obj);
+  renderSidebar();
+}
+
+// Get Synchro baseline movements for a given day type and peak period
+function getSynchroBaseline(obj, dayType, peak){
+  if(!obj.synchroPlans) return null;
+  const dt = dayType==='all'?'weekday':dayType;
+  const planName = PLAN_FOR_PEAK[dt]?.[peak];
+  return planName ? (obj.synchroPlans[planName]||null) : null;
+}
+
+// Compute max % diff across all movements for weekday AM+PM (for sidebar badge)
+function computeMaxDiff(obj){
+  if(!obj.synchroPlans||!obj.processed) return null;
+  const peaks = computePeaks(obj,'weekday');
+  if(!Object.keys(peaks).length) return null;
+  const synAM = obj.synchroPlans['AM'];
+  const synPM = obj.synchroPlans['PM'];
+  let maxDiff = 0;
+  CORE_MOVS.forEach(mov=>{
+    const m = mov.match(/([NSEW]B[LTR]?)$/i); if(!m) return;
+    const key = m[1].toUpperCase();
+    [[peaks[key]?.am, synAM?.[mov]], [peaks[key]?.pm, synPM?.[mov]]].forEach(([nv,sv])=>{
+      if(sv>0&&nv!==undefined) maxDiff=Math.max(maxDiff,Math.abs((nv-sv)/sv*100));
+    });
+  });
+  return maxDiff;
+}
+
+// ══════════════════════════════════════════════════════
+// PROCESS ONE INTERSECTION
+// ══════════════════════════════════════════════════════
+async function processIntersection(obj){
+  // 1. Dictionary
+  if(obj.dictFile){
+    try{
+      const wb=XLSX.read(await obj.dictFile.arrayBuffer());
+      const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+      if(rows.length){
+        const cols=Object.keys(rows[0]);
+        const detCol=cols.find(c=>c.toLowerCase().includes('det')&&c.toLowerCase().includes('name'))||
+                     cols.find(c=>c.toLowerCase().includes('detector')||c.toLowerCase().includes('channel'));
+        const mvCol =cols.find(c=>c.toLowerCase().includes('movement'))||
+                     cols.find(c=>c.toLowerCase().includes('approach'));
+        const phCol =cols.find(c=>c.toLowerCase().includes('phase'));
+        if(detCol&&mvCol){
+          obj.detectorDictionary={}; obj.phaseDictionary={};
+          rows.forEach(r=>{
+            const det=r[detCol],mv=r[mvCol];
+            if(det&&mv){ obj.detectorDictionary[det]=mv; if(phCol&&r[phCol]) obj.phaseDictionary[mv]=r[phCol]; }
+          });
+        }
+      }
+    }catch(e){console.warn('dict err',e);}
+  }
+
+  // 2. Volume files — skip non-xlsx files (e.g. folders or hidden files)
+  for(const file of obj.volumeFiles){
+    if(!/\.(xlsx?|xls)$/i.test(file.name)) continue;
+    const dateKey=extractDate(file.name); if(!dateKey) continue;
+    try{
+      const wb=XLSX.read(await file.arrayBuffer());
+      const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+      if(!rows.length) continue;
+      const cols=Object.keys(rows[0]);
+      const hasOld=cols.some(c=>c.includes('System Detector History Report'));
+      let clean;
+      if(hasOld){
+        clean=rows.slice(1).map(r=>({
+          dateTime:r['Print Date'],
+          detector:r['System Detector History Report_3'],
+          volume:parseFloat(r['System Detector History Report_4'])||0,
+          occupancy:parseFloat(r['System Detector History Report_5'])||0,
+          speed:parseFloat(r['System Detector History Report_6'])||0,
+          status:r['Print Time'],
+        }));
+      }else{
+        const dtC=cols.find(c=>c.toLowerCase().includes('date')||c.toLowerCase().includes('time'))||cols[0];
+        const detC=cols.find(c=>c.toLowerCase().includes('channel')||c.toLowerCase().includes('detector')||c.toLowerCase().includes('lane'));
+        const volC=cols.find(c=>c.toLowerCase().includes('volume')||c.toLowerCase().includes('count'));
+        const stC =cols.find(c=>c.toLowerCase().includes('status'));
+        clean=rows.map(r=>({
+          dateTime:r[dtC], detector:r[detC]||'Unknown',
+          volume:parseFloat(r[volC])||0, occupancy:0, speed:0,
+          status:r[stC]||'Valid',
+        }));
+      }
+      obj.rawDataByDate[dateKey]=clean;
+      obj.dateTypes[dateKey]=getDayType(dateKey, ST.dataYear);
+
+      const gran=detectGran(clean);
+      const valid=clean.filter(r=>r.status==='Valid'&&typeof r.volume==='number'&&r.detector);
+      const g={};
+      valid.forEach(r=>{
+        const m=excelToMin(r.dateTime);
+        const slot=gran.isAlready15?m:Math.floor(m/15)*15;
+        const t=minToHH(slot);
+        const k=`${r.detector}_${t}`;
+        if(!g[k])g[k]={detector:r.detector,time:t,volume:0};
+        g[k].volume+=r.volume;
+      });
+      obj.processedData[dateKey]={data:Object.values(g),granularity:gran};
+    }catch(e){console.warn(`err ${file.name}`,e);}
+  }
+
+  buildApproach(obj);
+  obj.processed=true;
+}
+
+function buildApproach(obj){
+  obj.approachData={};
+  if(!obj.detectorDictionary) return;
+  const approachMap={};
+  Object.entries(obj.detectorDictionary).forEach(([d,a])=>{(approachMap[a]||=[]).push(d);});
+  Object.keys(obj.processedData).forEach(date=>{
+    const grp={};
+    obj.processedData[date].data.forEach(r=>{
+      if(obj.excludedDetectors.has(r.detector)) return;
+      const ap=obj.detectorDictionary[r.detector]; if(!ap) return;
+      const k=`${ap}_${r.time}`;
+      if(!grp[k])grp[k]={approach:ap,time:r.time,volume:0,active:new Set()};
+      grp[k].active.add(r.detector); grp[k].volume+=r.volume;
+    });
+    Object.values(grp).forEach(g=>{
+      const tot=(approachMap[g.approach]||[]).length,act=g.active.size;
+      if(act>0&&act<tot) g.volume*=tot/act;
+    });
+    obj.approachData[date]=Object.values(grp).map(g=>({approach:g.approach,time:g.time,volume:g.volume}));
+  });
+}
+
+function aggHourly(data, key){
+  const g={};
+  data.forEach(r=>{
+    const h=r.time.split(':')[0]+':00';
+    const k=`${r[key]}_${h}`;
+    if(!g[k])g[k]={[key]:r[key],time:h,volume:0};
+    g[k].volume+=r.volume;
+  });
+  return Object.values(g);
+}
+
+// ══════════════════════════════════════════════════════
+// AVERAGED PROFILE
+// ══════════════════════════════════════════════════════
+function getAvgProfile(obj, dayTypeFilter, itemKey){
+  const dates=Object.keys(obj.processedData)
+    .filter(d=>!obj.excludedDates.has(d))
+    .filter(d=>dayTypeFilter==='all'||obj.dateTypes[d]===dayTypeFilter);
+  if(!dates.length) return [];
+
+  const raw=dates.flatMap(d=>{
+    const src=itemKey==='approach'?(obj.approachData[d]||[]):obj.processedData[d].data;
+    return src;
+  });
+
+  const groups={};
+  raw.forEach(r=>{
+    const item=r[itemKey]; if(!item) return;
+    const k=`${item}_${r.time}`;
+    if(!groups[k])groups[k]={[itemKey]:item,time:r.time,vols:[]};
+    groups[k].vols.push(r.volume);
+  });
+  return Object.values(groups).map(g=>({[itemKey]:g[itemKey],time:g.time,volume:g.vols.reduce((a,b)=>a+b,0)/g.vols.length}));
+}
+
+// ══════════════════════════════════════════════════════
+// SELECT INTERSECTION
+// ══════════════════════════════════════════════════════
+async function selectIntersection(id){
+  ST.currentId=id; ST.selectedItems=new Set(); ST.activeDayTab='all';
+  const obj=ST.intersections[id]; if(!obj) return;
+
+  const idx=ST.order.indexOf(id);
+  document.getElementById('navCtr').textContent=`${idx+1} / ${ST.order.length}`;
+  document.getElementById('prevBtn').disabled=idx<=0;
+  document.getElementById('nextBtn').disabled=idx>=ST.order.length-1;
+  document.getElementById('tbSeq').textContent=`#${obj.seqLabel}`;
+  document.getElementById('tbId').textContent=obj.kitsId;
+  setTopBadge(obj.status);
+  document.getElementById('notesArea').value=obj.notes;
+  updateStatusBtns(obj.status);
+  renderSidebar();
+
+  document.getElementById('emptyMsg').classList.add('hidden');
+  document.getElementById('mainContent').classList.add('hidden');
+  document.getElementById('loadMsg').classList.remove('hidden');
+
+  if(!obj.processed) await processIntersection(obj);
+  document.getElementById('loadMsg').classList.add('hidden');
+
+  if(!Object.keys(obj.processedData).length){
+    document.getElementById('emptyMsg').classList.remove('hidden');
+    document.getElementById('emptyMsg').innerHTML='<div class="no-data-icon">⚠️</div><div>No valid volume data in this folder</div>';
+    renderNpanel(obj); return;
+  }
+
+  document.getElementById('mainContent').classList.remove('hidden');
+
+  // Topbar day counts
+  const byT={weekday:0,saturday:0,sunday:0};
+  Object.entries(obj.dateTypes).forEach(([d,t])=>{ if(obj.processedData[d]) byT[t]=(byT[t]||0)+1; });
+  document.getElementById('tbDays').innerHTML=
+    (byT.weekday?`<span class="tb-day wday">${byT.weekday}W</span>`:'')+
+    (byT.saturday?`<span class="tb-day sat">${byT.saturday}Sa</span>`:'')+
+    (byT.sunday?`<span class="tb-day sun">${byT.sunday}Su</span>`:'');
+
+  // View mode
+  const vm=document.getElementById('viewMode');
+  vm.querySelector('option[value="approach"]').disabled=!obj.detectorDictionary;
+  vm.value=obj.detectorDictionary?'approach':'detector';
+
+  // Day tabs
+  ['weekday','saturday','sunday'].forEach(dt=>{
+    const tab=document.querySelector(`.day-tab[data-dt="${dt}"]`);
+    const has=Object.entries(obj.dateTypes).some(([d,t])=>t===dt&&obj.processedData[d]);
+    tab.classList.toggle('disabled',!has);
+  });
+  document.querySelectorAll('.day-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelector('.day-tab[data-dt="all"]').classList.add('active','all');
+  ST.activeDayTab='all';
+
+  renderInfoStrip(obj);
+  populateDateSelect(obj);
+  renderNpanel(obj);
+  // Show/hide vs Synchro option
+  const synOpt = document.getElementById('synchroOption');
+  if(synOpt) synOpt.style.display = (obj.synchroPlans)?'':'none';
+  updateChart();
+}
+
+function renderInfoStrip(obj){
+  const allDets=new Set();
+  Object.values(obj.processedData).forEach(d=>d.data.forEach(r=>allDets.add(r.detector)));
+  const byT={weekday:0,saturday:0,sunday:0};
+  Object.entries(obj.dateTypes).forEach(([d,t])=>{ if(obj.processedData[d]) byT[t]=(byT[t]||0)+1; });
+  const synchroHtml = ST.synchroLoaded
+    ? (obj.synchroPlans
+        ? `<div class="isp"><div class="isp-l">Synchro</div><div class="isp-v" style="color:var(--ok);font-size:10px;">✓ INTID ${obj.seq}</div></div>`
+        : `<div class="isp"><div class="isp-l">Synchro</div><div class="isp-v" style="color:var(--muted);font-size:10px;">No match</div></div>`)
+    : '';
+  document.getElementById('infoStrip').innerHTML=`
+    <div class="isp"><div class="isp-l">Folder</div><div class="isp-v" style="font-size:10px;">${esc(obj.id)}</div></div>
+    <div class="isp"><div class="isp-l" style="color:var(--wday)">Weekday</div><div class="isp-v" style="color:var(--wday)">${byT.weekday}</div></div>
+    <div class="isp"><div class="isp-l" style="color:var(--sat)">Saturday</div><div class="isp-v" style="color:var(--sat)">${byT.saturday}</div></div>
+    <div class="isp"><div class="isp-l" style="color:var(--sun)">Sunday</div><div class="isp-v" style="color:var(--sun)">${byT.sunday}</div></div>
+    <div class="isp"><div class="isp-l">Detectors</div><div class="isp-v">${allDets.size}</div></div>
+    ${obj.detectorDictionary?`<div class="isp"><div class="isp-l">Approaches</div><div class="isp-v">${uniq(Object.values(obj.detectorDictionary)).length}</div></div>`:''}
+    <div class="isp"><div class="isp-l">Dictionary</div><div class="isp-v" style="font-size:10px;color:${obj.dictFile?'var(--ok)':'var(--muted)'};">${obj.dictFile?'✓ Loaded':'None'}</div></div>
+    ${synchroHtml}
+  `;
+}
+
+function populateDateSelect(obj){
+  const dates=Object.keys(obj.processedData).sort();
+  const filtered=ST.activeDayTab==='all'?dates:dates.filter(d=>obj.dateTypes[d]===ST.activeDayTab);
+  const ds=document.getElementById('dateSelect');
+  ds.innerHTML=filtered.map(d=>{
+    const dt=obj.dateTypes[d];
+    const em=dt==='saturday'?'🟣':dt==='sunday'?'🩷':'📅';
+    return `<option value="${d}">${em} ${d}${obj.excludedDates.has(d)?' ❌':''}</option>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════════
+// DAY TAB
+// ══════════════════════════════════════════════════════
+function setDayTab(dt){
+  ST.activeDayTab=dt; ST.selectedItems=new Set();
+  document.querySelectorAll('.day-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelector(`.day-tab[data-dt="${dt}"]`).classList.add('active',dt);
+  const obj=ST.intersections[ST.currentId]; if(!obj||!obj.processed) return;
+  populateDateSelect(obj); renderNpanel(obj); updateChart();
+}
+
+// ══════════════════════════════════════════════════════
+// CHART
+// ══════════════════════════════════════════════════════
+function onDisplayModeChange(){
+  const mode=document.getElementById('displayMode').value;
+  document.getElementById('dateCtrl').classList.toggle('hidden', mode!=='individual');
+  const isSyn=mode==='synchro';
+  document.getElementById('achips').closest('.cg').classList.toggle('hidden', isSyn);
+  document.getElementById('aggMode').closest('.cg').classList.toggle('hidden', isSyn);
+  document.getElementById('viewMode').closest('.cg').classList.toggle('hidden', isSyn);
+  updateChart();
+}
+
+function updateChart(){
+  const obj=ST.intersections[ST.currentId]; if(!obj||!obj.processed) return;
+  const displayMode=document.getElementById('displayMode').value;
+
+  // ── VS SYNCHRO BAR CHART ────────────────────────────────
+  if(displayMode==='synchro'){
+    if(!obj.synchroPlans){
+      if(ST.chart){ST.chart.destroy();ST.chart=null;}
+      document.getElementById('chartTitle').textContent='No Synchro baseline matched for this intersection';
+      document.getElementById('chartSub').textContent=''; return;
+    }
+    const dayType=ST.activeDayTab==='all'?'weekday':ST.activeDayTab;
+    const peaks=computePeaks(obj,dayType);
+    const synAM=getSynchroBaseline(obj,dayType,'am');
+    const synPM=getSynchroBaseline(obj,dayType,'pm');
+    const newAM=[],newPM=[],bsynAM=[],bsynPM=[];
+    CORE_MOVS.forEach(mov=>{
+      const m=mov.match(/([NSEW]B[LTR]?)$/i); const key=m?m[1].toUpperCase():mov;
+      newAM.push(peaks[key]?.am||0); newPM.push(peaks[key]?.pm||0);
+      bsynAM.push(synAM?.[mov]||0); bsynPM.push(synPM?.[mov]||0);
+    });
+    const amPlan=PLAN_FOR_PEAK[dayType]?.am||''; const pmPlan=PLAN_FOR_PEAK[dayType]?.pm||'';
+    document.getElementById('chartTitle').textContent=`${obj.kitsId} · ${DAY_LABEL[dayType]} · New vs Synchro`;
+    document.getElementById('chartSub').textContent=`AM baseline: ${amPlan} · PM baseline: ${pmPlan}`;
+    if(ST.chart) ST.chart.destroy();
+    ST.chart=new Chart(document.getElementById('chartCanvas').getContext('2d'),{
+      type:'bar',
+      data:{labels:CORE_MOVS,datasets:[
+        {label:'New AM',   data:newAM,  backgroundColor:'#2563eb',borderRadius:3},
+        {label:'Synchro AM',data:bsynAM,backgroundColor:'#93c5fd',borderRadius:3},
+        {label:'New PM',   data:newPM,  backgroundColor:'#dc2626',borderRadius:3},
+        {label:'Synchro PM',data:bsynPM,backgroundColor:'#fca5a5',borderRadius:3},
+      ]},
+      options:{responsive:true,maintainAspectRatio:true,
+        plugins:{legend:{position:'top'},tooltip:{mode:'index',intersect:false}},
+        scales:{y:{beginAtZero:true,title:{display:true,text:'vph (peak hour)'}},x:{ticks:{font:{size:10}}}},
+        barPercentage:0.85,categoryPercentage:0.9}
+    });
+    return;
+  }
+
+  // ── LINE CHART (average / individual) ───────────────────
+  const viewMode=document.getElementById('viewMode').value;
+  const agg=document.getElementById('aggMode').value;
+  const dayType=ST.activeDayTab;
+  const itemKey=viewMode==='approach'?'approach':'detector';
+
+  let data;
+  if(displayMode==='average'){
+    data=getAvgProfile(obj,dayType,itemKey);
+    if(!data.length){ if(ST.chart){ST.chart.destroy();ST.chart=null;} document.getElementById('chartTitle').textContent='No data for selected day type'; document.getElementById('chartSub').textContent=''; document.getElementById('achips').innerHTML=''; return; }
+  } else {
+    const selDate=document.getElementById('dateSelect').value;
+    if(!selDate||!obj.processedData[selDate]) return;
+    data=viewMode==='approach'&&obj.approachData[selDate]?obj.approachData[selDate]:obj.processedData[selDate].data;
+  }
+  if(agg==='hourly') data=aggHourly(data,itemKey);
+  const items=uniq(data.map(d=>d[itemKey])).sort();
+  renderChips(items,itemKey);
+  const display=items.filter(i=>ST.selectedItems.has(i));
+  const times=uniq(data.map(d=>d.time)).sort();
+  const datasets=display.map((item,i)=>{
+    const idata=data.filter(d=>d[itemKey]===item);
+    let label=item;
+    if(viewMode==='approach'&&obj.detectorDictionary&&obj.excludedDetectors.size>0){
+      const dets=Object.entries(obj.detectorDictionary).filter(([d,a])=>a===item).map(([d])=>d);
+      const act=dets.filter(d=>!obj.excludedDetectors.has(d)).length;
+      if(act>0&&act<dets.length)label+=` (×${(dets.length/act).toFixed(2)})`;
+    }
+    return {label,borderWidth:2,tension:0.1,pointRadius:0.5,
+      borderColor:COLORS[i%COLORS.length],backgroundColor:COLORS[i%COLORS.length]+'22',
+      data:times.map(t=>{ const r=idata.find(d=>d.time===t); return r?Math.round(r.volume):null; })};
+  });
+  const aggStr=agg==='hourly'?'Hourly':'15-Min';
+  const typeStr=displayMode==='average'?`${DAY_LABEL[dayType]} Avg`:document.getElementById('dateSelect').value;
+  const dateCnt=displayMode==='average'?Object.keys(obj.processedData).filter(d=>!obj.excludedDates.has(d)&&(dayType==='all'||obj.dateTypes[d]===dayType)).length:1;
+  document.getElementById('chartTitle').textContent=`${obj.kitsId} · ${typeStr} · ${aggStr}`;
+  document.getElementById('chartSub').textContent=displayMode==='average'?`Averaged across ${dateCnt} date(s)`:'';
+  checkAdjWarn(obj);
+  if(ST.chart) ST.chart.destroy();
+  ST.chart=new Chart(document.getElementById('chartCanvas').getContext('2d'),{
+    type:'line',data:{labels:times,datasets},
+    options:{responsive:true,maintainAspectRatio:true,
+      plugins:{legend:{position:'top'},tooltip:{mode:'index',intersect:false}},
+      scales:{y:{beginAtZero:true,title:{display:true,text:`vol/${aggStr.toLowerCase()}`}},
+              x:{ticks:{maxRotation:45,minRotation:45,font:{size:10}}}}}
+  });
+}
+
+function renderChips(items,itemKey){
+  document.getElementById('itemLbl').textContent=itemKey==='approach'?'Approaches':'Detectors';
+  const exist=[...ST.selectedItems].filter(i=>items.includes(i));
+  if(!exist.length) ST.selectedItems=new Set(items.slice(0,8));
+  document.getElementById('achips').innerHTML=items.map(item=>
+    `<div class="ach${ST.selectedItems.has(item)?' on':''}" onclick="toggleItem('${esc(String(item).replace(/'/g,"\\'"))}')">
+      ${esc(item)}</div>`).join('');
+}
+
+function toggleItem(item){
+  if(ST.selectedItems.has(item))ST.selectedItems.delete(item); else ST.selectedItems.add(item);
+  updateChart();
+}
+
+function checkAdjWarn(obj){
+  const div=document.getElementById('adjWarn');
+  if(!obj.detectorDictionary||!obj.excludedDetectors.size){div.classList.add('hidden');return;}
+  const ap={};
+  Object.entries(obj.detectorDictionary).forEach(([d,a])=>(ap[a]||=[]).push(d));
+  const adj=Object.entries(ap)
+    .filter(([a,ds])=>ds.some(d=>obj.excludedDetectors.has(d))&&ds.some(d=>!obj.excludedDetectors.has(d)))
+    .map(([a,ds])=>{const act=ds.filter(d=>!obj.excludedDetectors.has(d)).length;return `${a}: ×${(ds.length/act).toFixed(2)}`;});
+  if(!adj.length){div.classList.add('hidden');return;}
+  div.classList.remove('hidden');
+  div.innerHTML=`<strong>⚠️ Adjustment factors applied:</strong> ${adj.join(' · ')}`;
+}
+
+// ══════════════════════════════════════════════════════
+// NOTES PANEL
+// ══════════════════════════════════════════════════════
+function diffCell(nv,sv){ if(!sv||sv===0) return `<td><span class="diff-na">—</span></td>`; const pct=(nv-sv)/sv*100; const cls=Math.abs(pct)<=15?'diff-ok':Math.abs(pct)<=30?'diff-warn':'diff-bad'; return `<td><span class="${cls}">${pct>=0?'+':''}${pct.toFixed(0)}%</span></td>`; }
+
+function renderNpanel(obj){
+  const inner=document.getElementById('npScroll');
+  if(!obj.processed||!Object.keys(obj.processedData).length){ inner.innerHTML='<p style="color:var(--light);font-size:12px;">No data.</p>'; return; }
+
+  // Synchro comparison table
+  let synHtml='';
+  if(ST.synchroLoaded){
+    const dayType=ST.activeDayTab==='all'?'weekday':ST.activeDayTab;
+    const amPlan=PLAN_FOR_PEAK[dayType]?.am||''; const pmPlan=PLAN_FOR_PEAK[dayType]?.pm||'';
+    if(obj.synchroPlans){
+      const peaks=computePeaks(obj,dayType);
+      const synAM=getSynchroBaseline(obj,dayType,'am');
+      const synPM=getSynchroBaseline(obj,dayType,'pm');
+      const rows=CORE_MOVS.map(mov=>{
+        const m=mov.match(/([NSEW]B[LTR]?)$/i); const key=m?m[1].toUpperCase():mov;
+        const nAM=peaks[key]?.am||0,nPM=peaks[key]?.pm||0,sAM=synAM?.[mov]||0,sPM=synPM?.[mov]||0;
+        if(!nAM&&!nPM&&!sAM&&!sPM) return '';
+        return `<tr><td>${mov}</td><td>${nAM||'—'}</td><td>${sAM||'—'}</td>${diffCell(nAM,sAM)}<td>${nPM||'—'}</td><td>${sPM||'—'}</td>${diffCell(nPM,sPM)}</tr>`;
+      }).join('');
+      synHtml=`<div class="syn-section">
+        <div class="syn-header" onclick="var b=this.nextElementSibling;b.style.display=b.style.display==='none'?'':'none';this.querySelector('.syn-header-arrow').classList.toggle('open')">
+          <span class="syn-header-title">📊 vs Synchro · ${DAY_LABEL[dayType]}</span><span class="syn-header-arrow open">▾</span>
+        </div>
+        <div class="syn-body" style="max-height:260px;overflow-y:auto;">
+          <table class="syn-table"><thead><tr><th>Mvmt</th><th>New AM</th><th>Syn AM</th><th>Δ</th><th>New PM</th><th>Syn PM</th><th>Δ</th></tr></thead>
+          <tbody>${rows||'<tr><td colspan="7" style="color:var(--light);text-align:center;padding:8px;">No movement data</td></tr>'}</tbody></table>
+          <div class="syn-plan-note">AM: ${amPlan} · PM: ${pmPlan}</div>
+        </div></div>`;
+    } else {
+      synHtml=`<div class="syn-no-match">No Synchro baseline for INTID ${obj.seq}</div>`;
+    }
+  }
+
+  const allDets=new Set();
+  Object.values(obj.processedData).forEach(d=>d.data.forEach(r=>allDets.add(r.detector)));
+  const detArr=[...allDets].sort();
+  const qc={};
+  detArr.forEach(det=>{
+    const s=[];
+    Object.values(obj.processedData).forEach(d=>d.data.forEach(r=>{if(r.detector===det)s.push(r.volume);}));
+    if(!s.length||s.every(v=>v===0)) qc[det]='critical';
+    else if(s.filter(v=>v===0).length/s.length>=0.85||uniq(s).length<=2) qc[det]='warn';
+    else qc[det]='normal';
+  });
+  inner.innerHTML=`${synHtml}
+    <div class="np-sec">
+      <div class="np-lbl">Detectors — click to exclude</div>
+      <div class="det-chips">
+        ${detArr.map(det=>{
+          const ex=obj.excludedDetectors.has(det);
+          const unmapped=!obj.detectorDictionary||!obj.detectorDictionary[det];
+          return `<div class="dch ${qc[det]}${ex?' excl':''}" onclick="toggleDet('${esc(String(det).replace(/'/g,"\\'"))}')">
+            ${esc(det)}${unmapped?`<span class="chip-tag">?</span>`:''}
+            <span class="dch-x">${ex?'↩':'×'}</span></div>`;
+        }).join('')}
+      </div>
+    </div>
+    <div class="np-sec">
+      <div class="np-lbl">Dates — click to exclude</div>
+      <div class="date-chips">
+        ${Object.keys(obj.processedData).sort().map(d=>{
+          const dt=obj.dateTypes[d]; const ex=obj.excludedDates.has(d);
+          const em=dt==='saturday'?'🟣':dt==='sunday'?'🩷':'📅';
+          return `<div class="datch ${dt}${ex?' excl':''}" onclick="toggleDate('${d}')">
+            ${em} ${d}<span class="datch-x">${ex?'↩':'×'}</span></div>`;
+        }).join('')}
+      </div>
+    </div>`;
+}
+
+function toggleDet(det){
+  const obj=ST.intersections[ST.currentId]; if(!obj) return;
+  if(obj.excludedDetectors.has(det))obj.excludedDetectors.delete(det); else obj.excludedDetectors.add(det);
+  buildApproach(obj); renderNpanel(obj); updateChart();
+}
+function toggleDate(d){
+  const obj=ST.intersections[ST.currentId]; if(!obj) return;
+  if(obj.excludedDates.has(d))obj.excludedDates.delete(d); else obj.excludedDates.add(d);
+  renderNpanel(obj); populateDateSelect(obj); updateChart();
+}
+
+// ══════════════════════════════════════════════════════
+// STATUS & NOTES
+// ══════════════════════════════════════════════════════
+function setStatus(s){ const obj=ST.intersections[ST.currentId]; if(!obj) return; obj.status=s; updateStatusBtns(s); setTopBadge(s); renderSidebar(); updateProgress(); }
+function saveNotes(){ const obj=ST.intersections[ST.currentId]; if(!obj) return; obj.notes=document.getElementById('notesArea').value; renderSidebar(); }
+function updateStatusBtns(s){ ['Ok','Warn','Issue'].forEach(k=>{ const m={Ok:'ok',Warn:'warning',Issue:'issue'}; document.getElementById('btn'+k)?.classList.toggle('on',m[k]===s); }); }
+function setTopBadge(s){ const b=document.getElementById('tbBadge'); b.className=`tb-badge ${s}`; b.textContent={ok:'✅ OK',warning:'⚠️ Warning',issue:'🚨 Issue',unreviewed:'Unreviewed'}[s]||s; }
+
+// ══════════════════════════════════════════════════════
+// NAVIGATION
+// ══════════════════════════════════════════════════════
+function navigate(dir){ const idx=ST.order.indexOf(ST.currentId); const n=idx+dir; if(n<0||n>=ST.order.length)return; selectIntersection(ST.order[n]); }
+
+// ══════════════════════════════════════════════════════
+// SIDEBAR
+// ══════════════════════════════════════════════════════
+function renderSidebar(){
+  const q=(document.getElementById('sbSearch')?.value||'').toLowerCase();
+  document.getElementById('sbList').innerHTML=ST.order
+    .filter(id=>id.toLowerCase().includes(q)||ST.intersections[id].kitsId.includes(q))
+    .map(id=>{
+      const o=ST.intersections[id];
+      const byT={weekday:0,saturday:0,sunday:0};
+      Object.entries(o.dateTypes).forEach(([d,t])=>{ if(o.processedData[d]) byT[t]=(byT[t]||0)+1; });
+      const note=o.notes?o.notes.split('\n')[0].trim():'';
+      // Synchro diff badge
+      let diffBadge='';
+      if(ST.synchroLoaded&&o.processed){
+        const md=computeMaxDiff(o);
+        if(md!==null){ const cls=md>30?'bad':md>15?'warn':'ok'; const lbl=md>30?`⚠️ ${Math.round(md)}%`:md>15?`~ ${Math.round(md)}%`:`✓ <15%`; diffBadge=`<span class="diff-badge ${cls}">${lbl}</span>`; }
+      }
+      return `<div class="int-item${id===ST.currentId?' active':''}" onclick="selectIntersection('${id}')">
+        <div class="int-row">
+          <span class="int-seq">${o.seqLabel}</span>
+          <span class="int-id">${esc(o.kitsId)}</span>
+          <span class="sdot ${o.status}"></span>
+        </div>
+        <div class="int-dc">
+          ${byT.weekday?`<span class="dc wday">${byT.weekday}W</span>`:''}
+          ${byT.saturday?`<span class="dc sat">${byT.saturday}Sa</span>`:''}
+          ${byT.sunday?`<span class="dc sun">${byT.sunday}Su</span>`:''}
+          ${!o.dictFile?'<span class="dc" style="background:rgba(220,38,38,.15);color:#f87171">no dict</span>':''}
+          ${diffBadge}
+        </div>
+        ${note?`<div class="int-note">${esc(note)}</div>`:''}
+      </div>`;
+    }).join('');
+  updateProgress();
+}
+function updateProgress(){ const total=ST.order.length; const done=ST.order.filter(id=>ST.intersections[id].status!=='unreviewed').length; document.getElementById('progFill').style.width=(total?(done/total*100):0)+'%'; document.getElementById('progTxt').textContent=`${done} of ${total} reviewed`; }
+
+// ══════════════════════════════════════════════════════
+// PEAK COMPUTATION
+// ══════════════════════════════════════════════════════
+function computePeaks(obj, dayType){
+  const itemKey=obj.detectorDictionary?'approach':'detector';
+  const avgData=getAvgProfile(obj,dayType,itemKey);
+  if(!avgData.length) return {};
+  const hourly=aggHourly(avgData,itemKey);
+  const items=uniq(hourly.map(r=>r[itemKey]));
+  const peaks={};
+  items.forEach(item=>{
+    const series=hourly.filter(r=>r[itemKey]===item);
+    let am=0,pm=0;
+    series.forEach(r=>{ const h=parseInt(r.time); if(h>=7&&h<=10&&r.volume>am)am=r.volume; if(h>=15&&h<=19&&r.volume>pm)pm=r.volume; });
+    peaks[item]={am:Math.round(am),pm:Math.round(pm)};
+  });
+  return peaks;
+}
+
+const MOVS = ['NBL','NBT','NBR','SBL','SBT','SBR','EBL','EBT','EBR','WBL','WBT','WBR'];
+function peaksToMovRows(obj, peaks, dayType){
+  const movPeaks={};
+  Object.entries(peaks).forEach(([item,p])=>{ const m=item.match(/([NSEW]B[LTR]?)$/i); if(m)movPeaks[m[1].toUpperCase()]=p; });
+  const amRow={Plan:'AM',Intersection:obj.id}; let amS=0;
+  const pmRow={Plan:'PM',Intersection:obj.id}; let pmS=0;
+  MOVS.forEach(mv=>{ amRow[mv]=movPeaks[mv]?.am||0; amS+=amRow[mv]; pmRow[mv]=movPeaks[mv]?.pm||0; pmS+=pmRow[mv]; });
+  amRow.Sum=amS; pmRow.Sum=pmS;
+  return [amRow,pmRow];
+}
+
+// ══════════════════════════════════════════════════════
+// EXPORTS
+// ══════════════════════════════════════════════════════
+function exportCurrentPeaks(){
+  const obj=ST.intersections[ST.currentId]; if(!obj||!obj.processed){alert('No data');return;}
+  const wb=XLSX.utils.book_new();
+  ['weekday','saturday','sunday'].forEach(dt=>{
+    const peaks=computePeaks(obj,dt);
+    if(!Object.keys(peaks).length) return;
+    const [am,pm]=peaksToMovRows(obj,peaks,dt);
+    const ws=XLSX.utils.json_to_sheet([am,{Plan:'',Intersection:''},pm]);
+    XLSX.utils.book_append_sheet(wb,ws,DAY_LABEL[dt]);
+  });
+  // Comparison sheet if Synchro loaded
+  if(obj.synchroPlans){
+    const compRows=[];
+    ['weekday','saturday','sunday'].forEach(dt=>{
+      const peaks=computePeaks(obj,dt); if(!Object.keys(peaks).length) return;
+      const synAM=getSynchroBaseline(obj,dt,'am'); const synPM=getSynchroBaseline(obj,dt,'pm');
+      const amPlan=PLAN_FOR_PEAK[dt]?.am||''; const pmPlan=PLAN_FOR_PEAK[dt]?.pm||'';
+      compRows.push({Movement:`=== ${DAY_LABEL[dt]} === AM:${amPlan} PM:${pmPlan}`,New_AM:'',Synchro_AM:'',Diff_AM:'',PctDiff_AM:'',New_PM:'',Synchro_PM:'',Diff_PM:'',PctDiff_PM:''});
+      CORE_MOVS.forEach(mov=>{
+        const m=mov.match(/([NSEW]B[LTR]?)$/i); const key=m?m[1].toUpperCase():mov;
+        const nAM=peaks[key]?.am||0,nPM=peaks[key]?.pm||0;
+        const sAM=synAM?.[mov]||0,sPM=synPM?.[mov]||0;
+        compRows.push({
+          Movement:mov, New_AM:nAM, Synchro_AM:sAM,
+          Diff_AM:nAM-sAM, PctDiff_AM:sAM>0?parseFloat(((nAM-sAM)/sAM*100).toFixed(1)):'',
+          New_PM:nPM, Synchro_PM:sPM,
+          Diff_PM:nPM-sPM, PctDiff_PM:sPM>0?parseFloat(((nPM-sPM)/sPM*100).toFixed(1)):'',
+        });
+      });
+      compRows.push({Movement:'',New_AM:'',Synchro_AM:'',Diff_AM:'',PctDiff_AM:'',New_PM:'',Synchro_PM:'',Diff_PM:'',PctDiff_PM:''});
+    });
+    const ws=XLSX.utils.json_to_sheet(compRows);
+    ws['!cols']=[{wch:18},{wch:10},{wch:12},{wch:10},{wch:12},{wch:10},{wch:12},{wch:10},{wch:12}];
+    XLSX.utils.book_append_sheet(wb,ws,'vs Synchro');
+  }
+  if(!wb.SheetNames.length){alert('No averaged data available');return;}
+  XLSX.writeFile(wb,`${obj.kitsId}_peaks_by_daytype.xlsx`);
+}
+
+function exportCurrentAvg(){
+  const obj=ST.intersections[ST.currentId]; if(!obj||!obj.processed){alert('No data');return;}
+  const wb=XLSX.utils.book_new();
+  const itemKey=obj.detectorDictionary?'approach':'detector';
+  const allTimes=[];
+  for(let h=0;h<24;h++) for(let m=0;m<60;m+=15) allTimes.push(`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`);
+  ['all','weekday','saturday','sunday'].forEach(dt=>{
+    const avgData=getAvgProfile(obj,dt,itemKey); if(!avgData.length) return;
+    const items=uniq(avgData.map(r=>r[itemKey])).sort();
+    const rows=allTimes.map(t=>{ const row={Time:t}; items.forEach(item=>{ const r=avgData.find(d=>d[itemKey]===item&&d.time===t); row[item]=r?Math.round(r.volume):0; }); return row; });
+    const ws=XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb,ws,DAY_LABEL[dt]);
+  });
+  if(!wb.SheetNames.length){alert('No data');return;}
+  XLSX.writeFile(wb,`${obj.kitsId}_avg_profile.xlsx`);
+}
+
+function exportAllNotes(){
+  const rows=ST.order.map(id=>{
+    const o=ST.intersections[id];
+    const byT={weekday:0,saturday:0,sunday:0};
+    Object.entries(o.dateTypes).forEach(([d,t])=>{ if(o.processedData[d]) byT[t]=(byT[t]||0)+1; });
+    const allDets=new Set(); Object.values(o.processedData).forEach(d=>d.data.forEach(r=>allDets.add(r.detector)));
+    const md = ST.synchroLoaded&&o.processed ? computeMaxDiff(o) : null;
+    return {
+      Seq:o.seqLabel, Folder:o.id, KITS_ID:o.kitsId, Status:o.status,
+      Weekday_Dates:byT.weekday, Saturday_Dates:byT.saturday, Sunday_Dates:byT.sunday,
+      Detectors:allDets.size, Excluded_Detectors:[...o.excludedDetectors].join(', '),
+      Excluded_Dates:[...o.excludedDates].join(', '),
+      Dictionary:o.dictFile?`✓ ${o.dictFile.name}`:'None',
+      Synchro_Matched:o.synchroPlans?'Yes':'No',
+      Max_PctDiff_Weekday: md!==null?parseFloat(md.toFixed(1)):'',
+      Notes:o.notes,
+    };
+  });
+  const ws=XLSX.utils.json_to_sheet(rows);
+  ws['!cols']=[{wch:6},{wch:22},{wch:14},{wch:12},{wch:15},{wch:15},{wch:13},{wch:12},{wch:28},{wch:24},{wch:28},{wch:14},{wch:18},{wch:60}];
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Review Notes');
+  const ts=new Date(); XLSX.writeFile(wb,`traffic_review_notes_${ts.getMonth()+1}${ts.getDate()}.xlsx`);
+}
+
+function exportAllPeaks(){
+  const wb=XLSX.utils.book_new();
+  ['weekday','saturday','sunday'].forEach(dt=>{
+    const rows=[];
+    ST.order.forEach(id=>{
+      const obj=ST.intersections[id]; if(!obj.processed) return;
+      const byT={weekday:0,saturday:0,sunday:0};
+      Object.entries(obj.dateTypes).forEach(([d,t])=>{ if(obj.processedData[d]) byT[t]=(byT[t]||0)+1; });
+      if(!byT[dt]) return;
+      const peaks=computePeaks(obj,dt); if(!Object.keys(peaks).length) return;
+      const [am,pm]=peaksToMovRows(obj,peaks,dt);
+      am['Seq']=obj.seqLabel; am['# Dates']=byT[dt];
+      pm['Seq']=''; pm['# Dates']='';
+      rows.push(am,pm,{Plan:'',Intersection:''});
+    });
+    if(!rows.length) return;
+    const ws=XLSX.utils.json_to_sheet(rows);
+    ws['!cols']=[{wch:5},{wch:6},{wch:22},...MOVS.map(()=>({wch:7})),{wch:8},{wch:8}];
+    XLSX.utils.book_append_sheet(wb,ws,DAY_LABEL[dt]);
+  });
+  if(!wb.SheetNames.length){alert('No processed data yet — open some intersections first.');return;}
+  const ts=new Date(); XLSX.writeFile(wb,`network_peaks_daytype_${ts.getMonth()+1}${ts.getDate()}.xlsx`);
+}
+
+// ══════════════════════════════════════════════════════
+// RESET
+// ══════════════════════════════════════════════════════
+function resetAll(){
+  if(!confirm('Reset and upload new files?')) return;
+  if(ST.chart){ST.chart.destroy();ST.chart=null;}
+  Object.assign(ST,{intersections:{},order:[],currentId:null,selectedItems:new Set(),activeDayTab:'all',synchroByIntid:{},synchroLoaded:false});
+  pVolFiles=[]; pDictFiles=[]; pSynchroFiles=[];
+  ['volInput','dictInput','synchroInput'].forEach(id=>{document.getElementById(id).value='';});
+  ['volStatus','dictStatus','synchroStatus'].forEach(id=>{document.getElementById(id).textContent='';});
+  ['volCard','dictCard','synchroCard'].forEach(id=>{document.getElementById(id).classList.remove('done');});
+  document.getElementById('matchInfo').textContent='';
+  document.getElementById('matchBtn').disabled=true;
+  document.getElementById('appLayout').classList.add('hidden');
+  document.getElementById('uploadScreen').classList.remove('hidden');
+}
+
+// ══════════════════════════════════════════════════════
+// KEYBOARD
+// ══════════════════════════════════════════════════════
+document.addEventListener('keydown',e=>{
+  if(e.target.tagName==='TEXTAREA'||e.target.tagName==='INPUT') return;
+  if(e.key==='ArrowRight'||e.key==='ArrowDown') navigate(1);
+  if(e.key==='ArrowLeft'||e.key==='ArrowUp') navigate(-1);
+  if(e.key==='1') setStatus('ok');
+  if(e.key==='2') setStatus('warning');
+  if(e.key==='3') setStatus('issue');
+  if(e.key==='w') setDayTab('weekday');
+  if(e.key==='s') setDayTab('saturday');
+  if(e.key==='u') setDayTab('sunday');
+  if(e.key==='a') setDayTab('all');
+});
+</script>
+</body>
+</html>
