@@ -1420,16 +1420,38 @@ function exportCurrentPeaks(){
 function exportCurrentAvg(){
   const obj=ST.intersections[ST.currentId]; if(!obj||!obj.processed){alert('No data');return;}
   const wb=XLSX.utils.book_new();
-  const itemKey=obj.detectorDictionary?'approach':'detector';
+  const STD_COLS=['NBL','NBT','NBR','SBL','SBT','SBR','EBL','EBT','EBR','WBL','WBT','WBR'];
   const allTimes=[];
   for(let h=0;h<24;h++) for(let m=0;m<60;m+=15) allTimes.push(`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`);
+
   ['all','weekday','saturday','sunday'].forEach(dt=>{
+    // Always use approach key if dict available, otherwise detector
+    const itemKey=obj.detectorDictionary?'approach':'detector';
     const avgData=getAvgProfile(obj,dt,itemKey); if(!avgData.length) return;
-    const items=uniq(avgData.map(r=>r[itemKey])).sort();
-    const rows=allTimes.map(t=>{ const row={Time:t}; items.forEach(item=>{ const r=avgData.find(d=>d[itemKey]===item&&d.time===t); row[item]=r?Math.round(r.volume):0; }); return row; });
+
+    // Build a lookup: standard movement → volume per time
+    // Approach names contain the movement suffix e.g. "Route50 EBT" → EBT
+    const movLookup={};  // { 'EBT': { '07:00': 234, ... }, ... }
+    avgData.forEach(r=>{
+      const item=r[itemKey];
+      const m=item.match(/([NSEW]B[LTR]?)$/i);
+      const col=m?m[1].toUpperCase():item.toUpperCase();
+      if(!movLookup[col]) movLookup[col]={};
+      // Sum in case multiple approaches map to same movement
+      movLookup[col][r.time]=(movLookup[col][r.time]||0)+r.volume;
+    });
+
+    const rows=allTimes.map(t=>{
+      const row={Time:t};
+      STD_COLS.forEach(col=>{ row[col]=movLookup[col]?.[t]?Math.round(movLookup[col][t]):0; });
+      return row;
+    });
+
     const ws=XLSX.utils.json_to_sheet(rows);
+    ws['!cols']=[{wch:8},...STD_COLS.map(()=>({wch:7}))];
     XLSX.utils.book_append_sheet(wb,ws,DAY_LABEL[dt]);
   });
+
   if(!wb.SheetNames.length){alert('No data');return;}
   XLSX.writeFile(wb,`${obj.kitsId}_avg_profile.xlsx`);
 }
